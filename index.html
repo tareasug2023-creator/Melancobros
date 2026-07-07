@@ -503,8 +503,36 @@
     function agregarMulta(pId) { if (prompt("Clave multa ($5):") === CONTRASENA_ADMIN) { const p = prestamos.find(x => x.id === pId); p.pagos.push({ tipo: 'extra', estado: 0, valor: 5 }); p.totalCobrar += 5; actualizarUI(); } }
     function menuEliminar(id) { const opc = prompt("1. Borrar Última Multa\n2. Borrar Préstamo Completo"); if (opc === "1" && prompt("Clave:") === CONTRASENA_ADMIN) { const p = prestamos.find(x => x.id === id); const idx = [...p.pagos].reverse().findIndex(pag => pag.tipo === 'extra'); if (idx !== -1) { const rIdx = p.pagos.length - 1 - idx; if (p.pagos[rIdx].estado === 1) capitalTotal -= 5; p.totalCobrar -= 5; p.pagos.splice(rIdx, 1); actualizarUI(); } } else if (opc === "2" && prompt("Clave:") === CONTRASENA_ADMIN) { const p = prestamos.find(x => x.id === id); capitalTotal += p.montoOriginal; prestamos = prestamos.filter(x => x.id !== id); actualizarUI(); } }
     function actualizarUI() { document.getElementById('capitalGlobal').value = capitalTotal.toFixed(2); prestamos.sort((a, b) => new Date(a.fechaInicio + "T00:00:00") - new Date(b.fechaInicio + "T00:00:00")); renderizarTabla(); calcularGanancias(); generarNotificaciones(); if(!editandoID) ["nombre", "celular", "monto", "porcentaje", "semanas", "fechaInicio"].forEach(id => { const el = document.getElementById(id); if(el) el.value = ""; }); }
-    async function guardarEnNube() { if (!confirm("¿Guardar?")) return; try { await fetch(WEB_APP_URL, { method: "POST", mode: "no-cors", body: JSON.stringify({ capital: capitalTotal, prestamos: prestamos }) }); alert("✅ Guardado."); } catch (e) { alert("❌ Error."); } }
-    async function cargarDeNube(silencioso = false) { try { const response = await fetch(WEB_APP_URL); const data = await response.json(); if (data) { prestamos = data.prestamos || []; capitalTotal = parseFloat(data.capital) || 0; actualizarUI(); if(!silencioso) alert("✅ Sincronizado."); } } catch (e) { if(!silencioso) alert("❌ Error."); } }
+  async function guardarEnNube() {
+    if (!confirm("¿Guardar?")) return;
+    try {
+        const response = await fetch(WEB_APP_URL, { 
+            method: "POST", 
+            body: JSON.stringify({ capital: capitalTotal, prestamos: prestamos }) 
+        });
+        const result = await response.text();
+        alert("✅ Guardado: " + result);
+    } catch (e) {
+        console.error(e);
+        alert("❌ Error al guardar. Revisa la consola (F12).");
+    }
+}
+
+async function cargarDeNube(silencioso = false) {
+    try {
+        const response = await fetch(WEB_APP_URL);
+        const data = await response.json();
+        if (data) {
+            prestamos = data.prestamos || [];
+            capitalTotal = parseFloat(data.capital) || 0;
+            actualizarUI();
+            if(!silencioso) alert("✅ Sincronizado.");
+        }
+    } catch (e) {
+        console.error(e);
+        if(!silencioso) alert("❌ Error al cargar. Asegúrate de que el script tenga permisos de 'Cualquiera'.");
+    }
+}
 
     window.onload = () => cargarDeNube(true);
 </script>
