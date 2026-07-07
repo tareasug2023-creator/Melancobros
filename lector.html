@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estado de mi Préstamo | Prestamos CC</title>
+    <style>
+        :root { 
+            --primary: #1e40af; 
+            --success: #15803d; 
+            --danger: #ef4444;
+            --warning: #b45309; /* Ámbar oscuro */
+            --bg: #f8fafc; 
+            --text: #1e293b; 
+        }
+        body { font-family: 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        
+        .card { width: 100%; max-width: 420px; background: white; padding: 30px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; text-align: center; }
+        
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid var(--primary); border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .info-box { background: #f1f5f9; padding: 15px; border-radius: 12px; margin: 20px 0; border: 1px solid #e2e8f0; text-align: left; }
+        .grid-pagos { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 15px; }
+        
+        .circle { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #cbd5e1; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; transition: 0.3s; position: relative; color: #64748b; background: white; }
+        
+        /* ESTADOS DE LOS CÍRCULOS (Marcados) */
+        .checked { background: var(--success) !important; border-color: var(--success) !important; color: white !important; }
+        .x-mark { background: var(--danger) !important; border-color: var(--danger) !important; color: white !important; }
+        
+        /* LÓGICA DE MULTAS (REGLA ACTUALIZADA) */
+        .extra-fee { border-color: var(--warning); color: var(--warning); border-width: 3px; background: #fffbeb; }
+        
+        /* Cuando la multa está PAGADA, se rellena de AMARILLO */
+        .extra-fee.checked { 
+            background: var(--warning) !important; 
+            border-color: var(--warning) !important; 
+            color: white !important; 
+        }
+
+        .multa-tag { font-size: 9px; position: absolute; bottom: -18px; color: var(--warning); font-weight: 800; text-transform: uppercase; }
+
+        .legend { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 25px; font-size: 12px; font-weight: 600; padding: 15px; border-top: 1px dashed #cbd5e1; }
+        .legend-item { display: flex; align-items: center; gap: 8px; justify-content: flex-start; padding-left: 10px; }
+        .dot { width: 14px; height: 14px; border-radius: 50%; }
+        
+        .warning-box { background: #fffbeb; border: 1px solid #fef3c7; color: #92400e; padding: 12px; border-radius: 10px; font-size: 12px; margin-top: 25px; line-height: 1.4; font-weight: 500; text-align: left; }
+
+        h2 { margin: 0 0 15px 0; color: var(--primary); border-bottom: 2px solid var(--primary); padding-bottom: 10px; }
+        .monto-grande { font-size: 24px; font-weight: 800; color: var(--text); }
+    </style>
+</head>
+<body>
+
+    <div id="loading-screen">
+        <div class="loader"></div>
+        <p>Sincronizando con el servidor...</p>
+    </div>
+
+    <div id="content" class="card" style="display:none;">
+        <h2 id="nombreCliente">Cargando...</h2>
+        
+        <div class="info-box">
+            <div style="font-size: 13px; color: #64748b; margin-bottom: 5px;">📍 <strong>Fecha Inicio:</strong> <span id="fechaInicio"></span></div>
+            <div class="monto-grande" id="totalDeuda">$0.00</div>
+            <div style="font-size: 14px; color: #64748b;">Cuota por periodo: <span id="valorCuota" style="font-weight: bold; color: var(--text);">$0.00</span></div>
+        </div>
+
+        <div style="font-size: 13px; font-weight: 800; margin-top: 25px; text-transform: uppercase; letter-spacing: 1px; color: #475569;">Mis Pagos Registrados</div>
+        
+        <div class="grid-pagos" id="contenedorPagos"></div>
+
+        <div class="legend">
+            <div class="legend-item"><div class="dot" style="background:var(--success)"></div> Pagada</div>
+            <div class="legend-item"><div class="dot" style="background:var(--danger)"></div> Atrasada</div>
+            <div class="legend-item"><div class="dot" style="border: 2px solid #cbd5e1; background: white;"></div> Pendiente</div>
+            <div class="legend-item"><div class="dot" style="background:var(--warning)"></div> Multa Pagada</div>
+        </div>
+
+        <div class="warning-box">
+            ⚠️ <strong>Recordatorio importante:</strong><br>
+            Una vez culminado los días de su préstamo se le cobrara una multa de $5.00 por la espera de otra semana.
+        </div>
+
+        <p style="font-size: 10px; color: #94a3b8; margin-top: 30px; font-style: italic;">
+            Este panel se actualiza automáticamente según los registros del administrador.
+        </p>
+    </div>
+
+    <script>
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbygxcelqlUOJBIWQlBsdIQ29Dg-O857xEgGYhHk_NYzcikTefoSEp4VRGlhtVO245RodQ/exec";
+        const params = new URLSearchParams(window.location.search);
+        const idBuscado = params.get('id');
+
+        async function obtenerDatos() {
+            if (!idBuscado) {
+                document.body.innerHTML = "<h3>Error: Enlace no válido</h3>";
+                return;
+            }
+
+            try {
+                const respuesta = await fetch(WEB_APP_URL);
+                const data = await respuesta.json();
+                const prestamo = data.prestamos.find(p => p.id == idBuscado);
+
+                if (prestamo) {
+                    document.getElementById('nombreCliente').innerText = prestamo.nombre;
+                    document.getElementById('fechaInicio').innerText = prestamo.fechaInicio;
+                    document.getElementById('totalDeuda').innerText = "Deuda Total: $" + prestamo.totalCobrar.toFixed(2);
+                    document.getElementById('valorCuota').innerText = "$" + prestamo.valorCuotaOriginal.toFixed(2);
+                    
+                    const contenedor = document.getElementById('contenedorPagos');
+                    prestamo.pagos.forEach((pago, index) => {
+                        const divWrap = document.createElement('div');
+                        divWrap.style.marginBottom = "22px";
+                        divWrap.style.display = "flex";
+                        divWrap.style.flexDirection = "column";
+                        divWrap.style.alignItems = "center";
+
+                        const div = document.createElement('div');
+                        div.className = 'circle';
+                        
+                        // LÓGICA DE MULTA
+                        const esMulta = (pago.tipo === 'extra' || pago.valor === 5);
+                        if (esMulta) {
+                            div.classList.add('extra-fee');
+                            const label = document.createElement('span');
+                            label.className = 'multa-tag';
+                            label.innerText = 'Multa';
+                            divWrap.appendChild(label);
+                        }
+
+                        // LÓGICA DE ESTADO (Pagado o X)
+                        if (pago.estado === 1) div.classList.add('checked');
+                        if (pago.estado === 2) div.classList.add('x-mark');
+                        
+                        div.innerText = index + 1;
+                        divWrap.prepend(div);
+                        contenedor.appendChild(divWrap);
+                    });
+
+                    document.getElementById('loading-screen').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                } else {
+                    document.body.innerHTML = "<h3>Préstamo finalizado o no encontrado.</h3>";
+                }
+            } catch (error) {
+                document.body.innerHTML = "<h3>Error de conexión con la nube.</h3>";
+            }
+        }
+        obtenerDatos();
+    </script>
+</body>
+</html>
